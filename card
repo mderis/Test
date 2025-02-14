@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Card</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1e1e2e;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+        .card {
+            width: 400px;
+            background: #24292e;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            margin: auto;
+        }
+        a {
+            color: #58a6ff;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2 id="name">Loading...</h2>
+        <p id="info">Fetching latest data...</p>
+        <a id="website" href="#" target="_blank">Visit My Website</a>
+    </div>
+
+    <script>
+        async function fetchData() {
+            try {
+                const response = await fetch('https://yourwebsite.com/api/data'); // Replace with your API
+                const data = await response.json();
+
+                document.getElementById('name').innerText = data.name;
+                document.getElementById('info').innerText = data.description;
+                document.getElementById('website').href = data.website;
+            } catch (error) {
+                document.getElementById('info').innerText = "Failed to load data.";
+            }
+        }
+
+        fetchData();
+    </script>
+
+</body>
+</html>
