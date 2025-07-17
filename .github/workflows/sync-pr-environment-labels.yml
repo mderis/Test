@@ -14,6 +14,7 @@ on:
 permissions:
     contents: read
     pull-requests: write # Required to add/remove labels
+    issues: write # Required to create labels
 
 jobs:
     sync-on-deploy:
@@ -44,6 +45,13 @@ jobs:
                     fi
                     echo "Label to sync: $LABEL_TO_SYNC"
                     echo "label_to_sync=$LABEL_TO_SYNC" >> $GITHUB_OUTPUT
+
+            -   name: Create label if it does not exist
+                env:
+                    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                    LABEL_TO_SYNC: ${{ steps.get_vars.outputs.label_to_sync }}
+                run: |
+                    gh label list | grep -qF "$LABEL_TO_SYNC" || gh label create "$LABEL_TO_SYNC" --color "fbca04" --description "PR deployed to an environment"
 
             -   name: Sync Labels for all Open PRs
                 env:
