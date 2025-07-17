@@ -1,12 +1,11 @@
-# .github/workflows/sync-pr-environment-labels.yml.yml
+# .github/workflows/sync-pr-environment-labels.yml
 
 name: Sync PR Environment Labels
 
 on:
     push:
         branches:
-            - 'deploy/stage'
-            - 'deploy/test'
+            - 'deploy/**'
     pull_request:
         types:
             - synchronize
@@ -15,6 +14,16 @@ permissions:
     contents: read
     pull-requests: write # Required to add/remove labels
     issues: write # Required to create labels
+
+# To add a new environment, add a new entry to the LABEL_MAPPING.
+# The key is the branch name (e.g., "deploy/production") and the value is the label to be applied (e.g., "prod env").
+# The branch name should follow the 'deploy/**' pattern to trigger the workflow.
+env:
+    LABEL_MAPPING: >
+        {
+            "deploy/stage": "stage env",
+            "deploy/test": "test env"
+        }
 
 jobs:
     sync-on-deploy:
@@ -29,24 +38,21 @@ jobs:
             -   name: Determine Branch and Label
                 id: get_vars
                 run: |
-                    # Get the branch name that triggered the workflow (e.g., 'deploy/stage')
                     TRIGGERING_BRANCH="${{ github.ref_name }}"
                     echo "Workflow triggered by push to: $TRIGGERING_BRANCH"
                     echo "triggering_branch=$TRIGGERING_BRANCH" >> $GITHUB_OUTPUT
 
-                    # Determine the corresponding label based on the branch
-                    if [[ "$TRIGGERING_BRANCH" == "deploy/stage" ]]; then
-                        LABEL_TO_SYNC="stage env"
-                    elif [[ "$TRIGGERING_BRANCH" == "deploy/test" ]]; then
-                        LABEL_TO_SYNC="test env"
+                    LABEL_TO_SYNC=$(echo '${{ env.LABEL_MAPPING }}' | jq -r --arg branch "$TRIGGERING_BRANCH" '.[$branch]')
+
+                    if [[ -n "$LABEL_TO_SYNC" && "$LABEL_TO_SYNC" != "null" ]]; then
+                        echo "Label to sync: $LABEL_TO_SYNC"
+                        echo "label_to_sync=$LABEL_TO_SYNC" >> $GITHUB_OUTPUT
                     else
-                        echo "Error: Not a deploy branch."
-                        exit 1
+                        echo "No label mapping found for branch $TRIGGERING_BRANCH. Exiting gracefully."
                     fi
-                    echo "Label to sync: $LABEL_TO_SYNC"
-                    echo "label_to_sync=$LABEL_TO_SYNC" >> $GITHUB_OUTPUT
 
             -   name: Create label if it does not exist
+                if: steps.get_vars.outputs.label_to_sync
                 env:
                     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                     LABEL_TO_SYNC: ${{ steps.get_vars.outputs.label_to_sync }}
@@ -54,6 +60,7 @@ jobs:
                     gh label list | grep -qF "$LABEL_TO_SYNC" || gh label create "$LABEL_TO_SYNC" --color "fbca04" --description "PR deployed to an environment"
 
             -   name: Sync Labels for all Open PRs
+                if: steps.get_vars.outputs.label_to_sync
                 env:
                     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                     LABEL_TO_SYNC: ${{ steps.get_vars.outputs.label_to_sync }}
@@ -99,5 +106,6 @@ jobs:
                     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                     PR_NUMBER: ${{ github.event.pull_request.number }}
                 run: |
+                    LABELS_TO_REMOVE=$(echo '${{ env.LABEL_MAPPING }}' | jq -r 'values | .[]' | sed 's/^/--remove-label /' | tr '\n' ' ')
                     echo "PR #${PR_NUMBER} was updated. Removing deploy labels..."
-                    gh pr edit "$PR_NUMBER" --remove-label "stage env" --remove-label "test env"
+                    gh pr edit "$PR_NUMBER" $LABELS_TO_REMOVE
