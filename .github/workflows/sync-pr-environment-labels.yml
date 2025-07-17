@@ -106,6 +106,6 @@ jobs:
                     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                     PR_NUMBER: ${{ github.event.pull_request.number }}
                 run: |
-                    LABELS_TO_REMOVE=$(echo '${{ env.LABEL_MAPPING }}' | jq -r 'values | .[]' | sed 's/^/--remove-label /' | tr '\n' ' ')
+                    LABELS_TO_REMOVE=$(echo '${{ env.LABEL_MAPPING }}' | jq -r 'values | .[]' | sed 's/.*/--remove-label "&"/' | tr '\n' ' ')
                     echo "PR #${PR_NUMBER} was updated. Removing deploy labels..."
                     gh pr edit "$PR_NUMBER" $LABELS_TO_REMOVE
