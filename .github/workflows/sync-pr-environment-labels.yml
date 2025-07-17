@@ -1,0 +1,94 @@
+# .github/workflows/sync-pr-environment-labels.yml.yml
+
+name: Sync PR Environment Labels
+
+on:
+    push:
+        branches:
+            - 'deploy/stage'
+            - 'deploy/test'
+    pull_request:
+        types:
+            - synchronize
+
+permissions:
+    contents: read
+    pull-requests: write # Required to add/remove labels
+
+jobs:
+    sync-on-deploy:
+        if: github.event_name == 'push'
+        runs-on: ubuntu-latest
+        steps:
+            -   name: Checkout full history
+                uses: actions/checkout@v4
+                with:
+                    fetch-depth: 0 # Fetches all history for all branches and tags
+
+            -   name: Determine Branch and Label
+                id: get_vars
+                run: |
+                    # Get the branch name that triggered the workflow (e.g., 'deploy/stage')
+                    TRIGGERING_BRANCH="${{ github.ref_name }}"
+                    echo "Workflow triggered by push to: $TRIGGERING_BRANCH"
+                    echo "triggering_branch=$TRIGGERING_BRANCH" >> $GITHUB_OUTPUT
+
+                    # Determine the corresponding label based on the branch
+                    if [[ "$TRIGGERING_BRANCH" == "deploy/stage" ]]; then
+                        LABEL_TO_SYNC="stage env"
+                    elif [[ "$TRIGGERING_BRANCH" == "deploy/test" ]]; then
+                        LABEL_TO_SYNC="test env"
+                    else
+                        echo "Error: Not a deploy branch."
+                        exit 1
+                    fi
+                    echo "Label to sync: $LABEL_TO_SYNC"
+                    echo "label_to_sync=$LABEL_TO_SYNC" >> $GITHUB_OUTPUT
+
+            -   name: Sync Labels for all Open PRs
+                env:
+                    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                    LABEL_TO_SYNC: ${{ steps.get_vars.outputs.label_to_sync }}
+                run: |
+                    # Get all open PRs, their numbers, head SHAs, and current labels
+                    # The 'jq' command formats this into a clean list for the loop
+                    gh pr list --state open --json number,headRefOid,labels | jq -c '.[]' | while read -r pr; do
+                        PR_NUMBER=$(echo "$pr" | jq -r '.number')
+                        PR_HEAD_SHA=$(echo "$pr" | jq -r '.headRefOid')
+                        HAS_LABEL=$(echo "$pr" | jq -r '.labels[].name' | grep -q "^${LABEL_TO_SYNC}$"; echo $?)
+
+                        echo "---"
+                        echo "Checking PR #$PR_NUMBER (SHA: $PR_HEAD_SHA)"
+
+                        # Check if the PR's head commit is an ancestor of the branch that was just pushed to.
+                        # This command exits with 0 (success) if it's an ancestor, and 1 (failure) if not.
+                        if git merge-base --is-ancestor "$PR_HEAD_SHA" HEAD; then
+                            echo "Status: PR is merged into ${{ github.ref_name }}."
+                            if [[ "$HAS_LABEL" -ne 0 ]]; then
+                                echo "Action: Adding label '${LABEL_TO_SYNC}'..."
+                                gh pr edit "$PR_NUMBER" --add-label "$LABEL_TO_SYNC"
+                            else
+                                echo "Action: No change needed. Label is already present."
+                            fi
+                        else
+                            echo "Status: PR is NOT merged into ${{ github.ref_name }}."
+                            if [[ "$HAS_LABEL" -eq 0 ]]; then
+                                echo "Action: Removing label '${LABEL_TO_SYNC}'..."
+                                gh pr edit "$PR_NUMBER" --remove-label "$LABEL_TO_SYNC"
+                            else
+                                echo "Action: No change needed. Label is already absent."
+                            fi
+                        fi
+                    done
+
+    remove-on-pr-update:
+        if: github.event_name == 'pull_request'
+        runs-on: ubuntu-latest
+        steps:
+            -   name: Remove deploy labels on PR update
+                env:
+                    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                    PR_NUMBER: ${{ github.event.pull_request.number }}
+                run: |
+                    echo "PR #${PR_NUMBER} was updated. Removing deploy labels..."
+                    gh pr edit "$PR_NUMBER" --remove-label "stage env" --remove-label "test env"
