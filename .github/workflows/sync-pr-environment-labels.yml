@@ -16,13 +16,14 @@ permissions:
     issues: write
 
 # To add a new environment, add a new entry to the LABEL_MAPPING.
-# The key is the branch name (e.g., "deploy/production") and the value is the label to be applied (e.g., "prod env").
+# The key is the branch name (e.g., "deploy/production").
+# The value is an object with the "name", "color", and "description" of the label.
 # The branch name should follow the 'deploy/**' pattern to trigger the workflow.
 env:
     LABEL_MAPPING: >
         {
-            "deploy/stage": "stage env",
-            "deploy/test": "test env"
+            "deploy/stage": { "name": "stage env", "color": "ff00cc", "description": "PR deployed to the stage environment" },
+            "deploy/test": { "name": "test env", "color": "66ffaa", "description": "PR deployed to the test environment" }
         }
 
 jobs:
@@ -41,25 +42,26 @@ jobs:
                     script: |
                         const { repo, ref_name } = context;
                         const labelMapping = JSON.parse(process.env.LABEL_MAPPING);
-                        const labelToSync = labelMapping[ref_name];
+                        const labelInfo = labelMapping[ref_name];
 
-                        if (!labelToSync) {
+                        if (!labelInfo) {
                             core.info(`No label mapping found for branch ${ref_name}. Exiting gracefully.`);
                             return;
                         }
 
-                        core.info(`Syncing label: "${labelToSync}"`);
+                        const labelName = labelInfo.name;
+                        core.info(`Syncing label: "${labelName}"`);
 
                         try {
-                            await github.rest.issues.getLabel({ ...repo, name: labelToSync });
+                            await github.rest.issues.getLabel({ ...repo, name: labelName });
                         } catch (error) {
                             if (error.status === 404) {
-                                core.info(`Label "${labelToSync}" does not exist. Creating it...`);
+                                core.info(`Label "${labelName}" does not exist. Creating it...`);
                                 await github.rest.issues.createLabel({
                                     ...repo,
-                                    name: labelToSync,
-                                    color: "fbca04",
-                                    description: "PR deployed to an environment",
+                                    name: labelName,
+                                    color: labelInfo.color,
+                                    description: labelInfo.description,
                                 });
                             } else {
                                 throw error;
@@ -74,7 +76,7 @@ jobs:
                         for (const pr of openPRs) {
                             core.info(`--- \nChecking PR #${pr.number}`);
                             const prLabels = pr.labels.map(label => label.name);
-                            const hasLabel = prLabels.includes(labelToSync);
+                            const hasLabel = prLabels.includes(labelName);
 
                             const isAncestor = await exec.getExecOutput(
                                 'git', ['merge-base', '--is-ancestor', pr.head.sha, 'HEAD'],
@@ -84,16 +86,16 @@ jobs:
                             if (isAncestor) {
                                 core.info(`Status: PR #${pr.number} is merged into ${ref_name}.`);
                                 if (!hasLabel) {
-                                    core.info(`Action: Adding label "${labelToSync}"...`);
-                                    await github.rest.issues.addLabels({ ...repo, issue_number: pr.number, labels: [labelToSync] });
+                                    core.info(`Action: Adding label "${labelName}"...`);
+                                    await github.rest.issues.addLabels({ ...repo, issue_number: pr.number, labels: [labelName] });
                                 } else {
                                     core.info(`Action: No change needed. Label is already present.`);
                                 }
                             } else {
                                 core.info(`Status: PR #${pr.number} is NOT merged into ${ref_name}.`);
                                 if (hasLabel) {
-                                    core.info(`Action: Removing label "${labelToSync}"...`);
-                                    await github.rest.issues.removeLabel({ ...repo, issue_number: pr.number, name: labelToSync });
+                                    core.info(`Action: Removing label "${labelName}"...`);
+                                    await github.rest.issues.removeLabel({ ...repo, issue_number: pr.number, name: labelName });
                                 } else {
                                     core.info(`Action: No change needed. Label is already absent.`);
                                 }
@@ -111,7 +113,7 @@ jobs:
                         const { repo, issue, payload } = context;
                         const pr = payload.pull_request;
                         const labelMapping = JSON.parse(process.env.LABEL_MAPPING);
-                        const deployLabels = new Set(Object.values(labelMapping));
+                        const deployLabels = new Set(Object.values(labelMapping).map(info => info.name));
                         const prLabels = pr.labels.map(label => label.name);
 
                         const labelsToRemove = prLabels.filter(label => deployLabels.has(label));
