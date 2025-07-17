@@ -93,6 +93,7 @@ jobs:
         if: github.event_name == 'pull_request'
         runs-on: ubuntu-latest
         steps:
+            -   uses: actions/checkout@v4
             -   name: Remove deploy labels on PR update
                 env:
                     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
