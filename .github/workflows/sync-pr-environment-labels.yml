@@ -39,7 +39,7 @@ jobs:
                 uses: actions/github-script@v7
                 with:
                     script: |
-                        const { repo, ref_name } = github.context;
+                        const { repo, ref_name } = context;
                         const labelMapping = JSON.parse(process.env.LABEL_MAPPING);
                         const labelToSync = labelMapping[ref_name];
 
@@ -108,8 +108,8 @@ jobs:
                 uses: actions/github-script@v7
                 with:
                     script: |
-                        const { repo, issue } = github.context;
-                        const pr = github.context.payload.pull_request;
+                        const { repo, issue, payload } = context;
+                        const pr = payload.pull_request;
                         const labelMapping = JSON.parse(process.env.LABEL_MAPPING);
                         const deployLabels = new Set(Object.values(labelMapping));
                         const prLabels = pr.labels.map(label => label.name);
