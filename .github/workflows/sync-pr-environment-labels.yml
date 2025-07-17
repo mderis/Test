@@ -40,12 +40,13 @@ jobs:
                 uses: actions/github-script@v7
                 with:
                     script: |
-                        const { repo, ref_name } = context;
+                        const { repo, ref } = context;
+                        const branchName = ref.replace('refs/heads/', '');
                         const labelMapping = JSON.parse(process.env.LABEL_MAPPING);
-                        const labelInfo = labelMapping[ref_name];
+                        const labelInfo = labelMapping[branchName];
 
                         if (!labelInfo) {
-                            core.info(`No label mapping found for branch ${ref_name}. Exiting gracefully.`);
+                            core.info(`No label mapping found for branch ${branchName}. Exiting gracefully.`);
                             return;
                         }
 
@@ -84,7 +85,7 @@ jobs:
                             ).then(res => res.exitCode === 0);
 
                             if (isAncestor) {
-                                core.info(`Status: PR #${pr.number} is merged into ${ref_name}.`);
+                                core.info(`Status: PR #${pr.number} is merged into ${branchName}.`);
                                 if (!hasLabel) {
                                     core.info(`Action: Adding label "${labelName}"...`);
                                     await github.rest.issues.addLabels({ ...repo, issue_number: pr.number, labels: [labelName] });
@@ -92,7 +93,7 @@ jobs:
                                     core.info(`Action: No change needed. Label is already present.`);
                                 }
                             } else {
-                                core.info(`Status: PR #${pr.number} is NOT merged into ${ref_name}.`);
+                                core.info(`Status: PR #${pr.number} is NOT merged into ${branchName}.`);
                                 if (hasLabel) {
                                     core.info(`Action: Removing label "${labelName}"...`);
                                     await github.rest.issues.removeLabel({ ...repo, issue_number: pr.number, name: labelName });
