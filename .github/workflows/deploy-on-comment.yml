@@ -9,7 +9,6 @@ on:
 permissions:
     contents: write
     pull-requests: write
-    reactions: write
 
 # To add a new deployment command, add a new entry to the DEPLOY_MAPPING.
 # The key is the command to be used in the PR comment (e.g., "/deploy/stage").
