@@ -86,12 +86,17 @@ jobs:
                 if: steps.check.outputs.target_branch
                 id: status_comment
                 uses: actions/github-script@v7
+                env:
+                    TARGET_BRANCH: ${{ steps.check.outputs.target_branch }}
+                    TARGET_BRANCH_URL: ${{ steps.check.outputs.target_branch_url }}
+                    ACTOR: ${{ github.actor }}
                 with:
                     script: |
+                        const body = `⏳ Deployment to [`${process.env.TARGET_BRANCH}`](${process.env.TARGET_BRANCH_URL}) initiated by @${process.env.ACTOR}...`;
                         const { data: comment } = await github.rest.issues.createComment({
                             ...context.repo,
                             issue_number: context.issue.number,
-                            body: `⏳ Deployment to [`${{ steps.check.outputs.target_branch }}`](${{ steps.check.outputs.target_branch_url }}) initiated by @${{ github.actor }}...`,
+                            body: body,
                         });
                         return comment.id;
 
@@ -118,21 +123,25 @@ jobs:
             -   name: Update comment and reaction on success
                 if: success() && steps.check.outputs.target_branch
                 uses: actions/github-script@v7
+                env:
+                    COMMENT_ID: ${{ steps.status_comment.outputs.result }}
+                    REACTION_ID: ${{ steps.reaction.outputs.result }}
+                    TARGET_BRANCH: ${{ steps.check.outputs.target_branch }}
+                    TARGET_BRANCH_URL: ${{ steps.check.outputs.target_branch_url }}
+                    ACTOR: ${{ github.actor }}
                 with:
                     script: |
-                        // Update comment
+                        const body = `✅ Deployment to [`${process.env.TARGET_BRANCH}`](${process.env.TARGET_BRANCH_URL}) by @${process.env.ACTOR} successful!`;
                         await github.rest.issues.updateComment({
                             ...context.repo,
-                            comment_id: ${{ steps.status_comment.outputs.result }},
-                            body: `✅ Deployment to [`${{ steps.check.outputs.target_branch }}`](${{ steps.check.outputs.target_branch_url }}) by @${{ github.actor }} successful!`,
+                            comment_id: process.env.COMMENT_ID,
+                            body: body,
                         });
-                        // Delete old reaction
                         await github.rest.reactions.deleteForIssueComment({
                             ...context.repo,
                             comment_id: context.payload.comment.id,
-                            reaction_id: ${{ steps.reaction.outputs.result }},
+                            reaction_id: process.env.REACTION_ID,
                         });
-                        // Add new reaction
                         await github.rest.reactions.createForIssueComment({
                             ...context.repo,
                             comment_id: context.payload.comment.id,
@@ -142,22 +151,27 @@ jobs:
             -   name: Update comment and reaction on failure
                 if: failure() && steps.check.outputs.target_branch
                 uses: actions/github-script@v7
+                env:
+                    COMMENT_ID: ${{ steps.status_comment.outputs.result }}
+                    REACTION_ID: ${{ steps.reaction.outputs.result }}
+                    TARGET_BRANCH: ${{ steps.check.outputs.target_branch }}
+                    TARGET_BRANCH_URL: ${{ steps.check.outputs.target_branch_url }}
+                    ACTOR: ${{ github.actor }}
+                    RUN_ID: ${{ github.run_id }}
                 with:
                     script: |
-                        const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-                        // Update comment
+                        const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${process.env.RUN_ID}`;
+                        const body = `❌ Deployment to [`${process.env.TARGET_BRANCH}`](${process.env.TARGET_BRANCH_URL}) by @${process.env.ACTOR} failed. See [Action Run](${runUrl}) for details.`;
                         await github.rest.issues.updateComment({
                             ...context.repo,
-                            comment_id: ${{ steps.status_comment.outputs.result }},
-                            body: `❌ Deployment to [`${{ steps.check.outputs.target_branch }}`](${{ steps.check.outputs.target_branch_url }}) by @${{ github.actor }} failed. See [Action Run](${runUrl}) for details.`,
+                            comment_id: process.env.COMMENT_ID,
+                            body: body,
                         });
-                        // Delete old reaction
                         await github.rest.reactions.deleteForIssueComment({
                             ...context.repo,
                             comment_id: context.payload.comment.id,
-                            reaction_id: ${{ steps.reaction.outputs.result }},
+                            reaction_id: process.env.REACTION_ID,
                         });
-                        // Add new reaction
                         await github.rest.reactions.createForIssueComment({
                             ...context.repo,
                             comment_id: context.payload.comment.id,
