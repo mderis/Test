@@ -92,7 +92,7 @@ jobs:
                     ACTOR: ${{ github.actor }}
                 with:
                     script: |
-                        const body = `⏳ Deployment to [`${process.env.TARGET_BRANCH}`](${process.env.TARGET_BRANCH_URL}) initiated by @${process.env.ACTOR}...`;
+                        const body = '⏳ Deployment to [`' + process.env.TARGET_BRANCH + '`](' + process.env.TARGET_BRANCH_URL + ') initiated by @' + process.env.ACTOR + '...';
                         const { data: comment } = await github.rest.issues.createComment({
                             ...context.repo,
                             issue_number: context.issue.number,
@@ -131,7 +131,7 @@ jobs:
                     ACTOR: ${{ github.actor }}
                 with:
                     script: |
-                        const body = `✅ Deployment to [`${process.env.TARGET_BRANCH}`](${process.env.TARGET_BRANCH_URL}) by @${process.env.ACTOR} successful!`;
+                        const body = '✅ Deployment to [`' + process.env.TARGET_BRANCH + '`](' + process.env.TARGET_BRANCH_URL + ') by @' + process.env.ACTOR + ' successful!';
                         await github.rest.issues.updateComment({
                             ...context.repo,
                             comment_id: process.env.COMMENT_ID,
@@ -160,8 +160,8 @@ jobs:
                     RUN_ID: ${{ github.run_id }}
                 with:
                     script: |
-                        const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${process.env.RUN_ID}`;
-                        const body = `❌ Deployment to [`${process.env.TARGET_BRANCH}`](${process.env.TARGET_BRANCH_URL}) by @${process.env.ACTOR} failed. See [Action Run](${runUrl}) for details.`;
+                        const runUrl = 'https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + process.env.RUN_ID;
+                        const body = '❌ Deployment to [`' + process.env.TARGET_BRANCH + '`](' + process.env.TARGET_BRANCH_URL + ') by @' + process.env.ACTOR + ' failed. See [Action Run](' + runUrl + ') for details.';
                         await github.rest.issues.updateComment({
                             ...context.repo,
                             comment_id: process.env.COMMENT_ID,
