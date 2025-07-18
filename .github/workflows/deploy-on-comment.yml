@@ -145,7 +145,7 @@ jobs:
                         await github.rest.reactions.createForIssueComment({
                             ...context.repo,
                             comment_id: context.payload.comment.id,
-                            content: 'tada',
+                            content: 'hooray',
                         });
 
             -   name: Update comment and reaction on failure
@@ -175,5 +175,5 @@ jobs:
                         await github.rest.reactions.createForIssueComment({
                             ...context.repo,
                             comment_id: context.payload.comment.id,
-                            content: 'x',
+                            content: 'confused',
                         });
