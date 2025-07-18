@@ -1,0 +1,167 @@
+# .github/workflows/deploy-on-comment.yml
+
+name: Deploy on PR Comment
+
+on:
+    issue_comment:
+        types: [created]
+
+permissions:
+    contents: write
+    pull-requests: write
+    reactions: write
+
+# To add a new deployment command, add a new entry to the DEPLOY_MAPPING.
+# The key is the command to be used in the PR comment (e.g., "/deploy/stage").
+# The value is the target branch name (e.g., "deploy/stage").
+env:
+    DEPLOY_MAPPING: >
+        {
+            "/deploy/stage": "deploy/stage",
+            "/deploy/test": "deploy/test"
+        }
+
+jobs:
+    deploy:
+        if: github.event.issue.pull_request
+        runs-on: ubuntu-latest
+        steps:
+            -   name: Check for command and user permissions
+                id: check
+                uses: actions/github-script@v7
+                with:
+                    script: |
+                        const { context } = require('@actions/github');
+                        const { DEPLOY_MAPPING } = process.env;
+                        const commentBody = context.payload.comment.body.trim();
+                        const deployMapping = JSON.parse(DEPLOY_MAPPING);
+                        const actor = context.actor;
+                        const repoUrl = context.payload.repository.html_url;
+
+                        const targetBranch = deployMapping[commentBody];
+                        if (!targetBranch) {
+                            core.info(`Comment is not a deploy command. Skipping.`);
+                            return;
+                        }
+                        core.setOutput('target_branch', targetBranch);
+                        core.setOutput('target_branch_url', `${repoUrl}/tree/${targetBranch}`);
+                        core.info(`Found deploy command "${commentBody}" for branch "${targetBranch}".`);
+
+                        const { data: { permission } } = await github.rest.repos.getCollaboratorPermissionLevel({
+                            ...context.repo,
+                            username: actor,
+                        });
+
+                        if (permission !== 'admin' && permission !== 'write') {
+                            const msg = `User @${actor} does not have write permission.`;
+                            core.setFailed(msg);
+                            await github.rest.issues.createComment({
+                                ...context.repo,
+                                issue_number: context.issue.number,
+                                body: `❌ **Deployment Failed:** ${msg}`,
+                            });
+                            return;
+                        }
+                        core.info(`User @${actor} has "${permission}" permission.`);
+
+                        const { data: pr } = await github.rest.pulls.get({
+                            ...context.repo,
+                            pull_number: context.issue.number,
+                        });
+                        core.setOutput('pr_head_ref', pr.head.ref);
+                        core.info(`PR head ref is "${pr.head.ref}".`);
+
+            -   name: Acknowledge with reaction
+                if: steps.check.outputs.target_branch
+                id: reaction
+                uses: actions/github-script@v7
+                with:
+                    script: |
+                        const { data: reaction } = await github.rest.reactions.createForIssueComment({
+                            ...context.repo,
+                            comment_id: context.payload.comment.id,
+                            content: 'rocket',
+                        });
+                        return reaction.id;
+
+            -   name: Create deployment status comment
+                if: steps.check.outputs.target_branch
+                id: status_comment
+                uses: actions/github-script@v7
+                with:
+                    script: |
+                        const { data: comment } = await github.rest.issues.createComment({
+                            ...context.repo,
+                            issue_number: context.issue.number,
+                            body: `⏳ Deployment to [`${{ steps.check.outputs.target_branch }}`](${{ steps.check.outputs.target_branch_url }}) initiated by @${{ github.actor }}...`,
+                        });
+                        return comment.id;
+
+            -   name: Checkout code
+                if: steps.check.outputs.target_branch
+                uses: actions/checkout@v4
+                with:
+                    fetch-depth: 0
+
+            -   name: Merge and Push
+                if: steps.check.outputs.target_branch
+                run: |
+                    set -e
+                    git config user.name "github-actions[bot]"
+                    git config user.email "github-actions[bot]@users.noreply.github.com"
+                    TARGET_BRANCH="${{ steps.check.outputs.target_branch }}"
+                    PR_HEAD_REF="${{ steps.check.outputs.pr_head_ref }}"
+                    PR_NUMBER="${{ github.event.issue.number }}"
+                    git checkout "$TARGET_BRANCH"
+                    git pull origin "$TARGET_BRANCH"
+                    git merge "origin/$PR_HEAD_REF" --no-ff -m "Deploy: Merge PR #$PR_NUMBER into $TARGET_BRANCH"
+                    git push origin "$TARGET_BRANCH"
+
+            -   name: Update comment and reaction on success
+                if: success() && steps.check.outputs.target_branch
+                uses: actions/github-script@v7
+                with:
+                    script: |
+                        // Update comment
+                        await github.rest.issues.updateComment({
+                            ...context.repo,
+                            comment_id: ${{ steps.status_comment.outputs.result }},
+                            body: `✅ Deployment to [`${{ steps.check.outputs.target_branch }}`](${{ steps.check.outputs.target_branch_url }}) by @${{ github.actor }} successful!`,
+                        });
+                        // Delete old reaction
+                        await github.rest.reactions.deleteForIssueComment({
+                            ...context.repo,
+                            comment_id: context.payload.comment.id,
+                            reaction_id: ${{ steps.reaction.outputs.result }},
+                        });
+                        // Add new reaction
+                        await github.rest.reactions.createForIssueComment({
+                            ...context.repo,
+                            comment_id: context.payload.comment.id,
+                            content: 'tada',
+                        });
+
+            -   name: Update comment and reaction on failure
+                if: failure() && steps.check.outputs.target_branch
+                uses: actions/github-script@v7
+                with:
+                    script: |
+                        const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+                        // Update comment
+                        await github.rest.issues.updateComment({
+                            ...context.repo,
+                            comment_id: ${{ steps.status_comment.outputs.result }},
+                            body: `❌ Deployment to [`${{ steps.check.outputs.target_branch }}`](${{ steps.check.outputs.target_branch_url }}) by @${{ github.actor }} failed. See [Action Run](${runUrl}) for details.`,
+                        });
+                        // Delete old reaction
+                        await github.rest.reactions.deleteForIssueComment({
+                            ...context.repo,
+                            comment_id: context.payload.comment.id,
+                            reaction_id: ${{ steps.reaction.outputs.result }},
+                        });
+                        // Add new reaction
+                        await github.rest.reactions.createForIssueComment({
+                            ...context.repo,
+                            comment_id: context.payload.comment.id,
+                            content: 'x',
+                        });
