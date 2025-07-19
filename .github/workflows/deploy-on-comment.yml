@@ -100,25 +100,47 @@ jobs:
                         });
                         return comment.id;
 
+            -   name: Get Bot User Info
+                if: steps.check.outputs.target_branch
+                id: bot_user
+                uses: actions/github-script@v7
+                with:
+                    github-token: ${{ secrets.GH_PAT }}
+                    script: |
+                        const { data: user } = await github.rest.users.getAuthenticated();
+                        core.setOutput('name', user.name || user.login);
+                        core.setOutput('email', user.email || `${user.login}@users.noreply.github.com`);
+
             -   name: Checkout code
                 if: steps.check.outputs.target_branch
                 uses: actions/checkout@v4
                 with:
                     fetch-depth: 0
+                    token: ${{ secrets.GH_PAT }}
 
             -   name: Merge and Push
                 if: steps.check.outputs.target_branch
+                env:
+                    GH_PAT: ${{ secrets.GH_PAT }}
                 run: |
                     set -e
-                    git config user.name "github-actions[bot]"
-                    git config user.email "github-actions[bot]@users.noreply.github.com"
+                    git config user.name "${{ steps.bot_user.outputs.name }}"
+                    git config user.email "${{ steps.bot_user.outputs.email }}"
+
                     TARGET_BRANCH="${{ steps.check.outputs.target_branch }}"
                     PR_HEAD_REF="${{ steps.check.outputs.pr_head_ref }}"
                     PR_NUMBER="${{ github.event.issue.number }}"
+                    REPO_URL="https://x-access-token:${GH_PAT}@github.com/${{ github.repository }}.git"
+
+                    echo "Switching to target branch: $TARGET_BRANCH"
                     git checkout "$TARGET_BRANCH"
-                    git pull origin "$TARGET_BRANCH"
+                    git pull "$REPO_URL" "$TARGET_BRANCH"
+
+                    echo "Merging PR branch: origin/$PR_HEAD_REF"
                     git merge "origin/$PR_HEAD_REF" --no-ff -m "Deploy: Merge PR #$PR_NUMBER into $TARGET_BRANCH"
-                    git push origin "$TARGET_BRANCH"
+
+                    echo "Pushing to origin/$TARGET_BRANCH"
+                    git push "$REPO_URL" "HEAD:$TARGET_BRANCH"
 
             -   name: Update comment and reaction on success
                 if: success() && steps.check.outputs.target_branch
