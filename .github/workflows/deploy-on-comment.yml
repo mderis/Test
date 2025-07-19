@@ -74,6 +74,7 @@ jobs:
                 id: reaction
                 uses: actions/github-script@v7
                 with:
+                    github-token: ${{ secrets.GH_PAT }}
                     script: |
                         const { data: reaction } = await github.rest.reactions.createForIssueComment({
                             ...context.repo,
@@ -91,6 +92,7 @@ jobs:
                     TARGET_BRANCH_URL: ${{ steps.check.outputs.target_branch_url }}
                     ACTOR: ${{ github.actor }}
                 with:
+                    github-token: ${{ secrets.GH_PAT }}
                     script: |
                         const body = '⏳ Deployment to [`' + process.env.TARGET_BRANCH + '`](' + process.env.TARGET_BRANCH_URL + ') initiated by @' + process.env.ACTOR + '...';
                         const { data: comment } = await github.rest.issues.createComment({
@@ -152,6 +154,7 @@ jobs:
                     TARGET_BRANCH_URL: ${{ steps.check.outputs.target_branch_url }}
                     ACTOR: ${{ github.actor }}
                 with:
+                    github-token: ${{ secrets.GH_PAT }}
                     script: |
                         const body = '✅ Deployment to [`' + process.env.TARGET_BRANCH + '`](' + process.env.TARGET_BRANCH_URL + ') by @' + process.env.ACTOR + ' successful!';
                         await github.rest.issues.updateComment({
@@ -181,6 +184,7 @@ jobs:
                     ACTOR: ${{ github.actor }}
                     RUN_ID: ${{ github.run_id }}
                 with:
+                    github-token: ${{ secrets.GH_PAT }}
                     script: |
                         const runUrl = 'https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + process.env.RUN_ID;
                         const body = '❌ Deployment to [`' + process.env.TARGET_BRANCH + '`](' + process.env.TARGET_BRANCH_URL + ') by @' + process.env.ACTOR + ' failed. See [Action Run](' + runUrl + ') for details.';
